@@ -202,12 +202,12 @@ void MFRC522::PCD_ClrRegisterBits(uint8_t reg, uint8_t mask)
 uint8_t MFRC522::PCD_CalculateCRC(uint8_t *data, uint8_t length, uint8_t *result)
 {
   PCD_WriteRegister(CommandReg, PCD_Idle);      // Stop any active command.
-  PCD_WriteRegister(DivIrqReg, 0x04);         // Clear the CRCIRq interrupt request bit
-  PCD_SetRegisterBits(FIFOLevelReg, 0x80);   // FlushBuffer = 1, FIFO initialization
-  PCD_WriteRegister(FIFODataReg, length, data);   // Write data to the FIFO
+  PCD_WriteRegister(DivIrqReg, 0x04);           // Clear the CRCIRq interrupt request bit
+  PCD_SetRegisterBits(FIFOLevelReg, 0x80);      // FlushBuffer = 1, FIFO initialization
+  PCD_WriteRegister(FIFODataReg, length, data); // Write data to the FIFO
   PCD_WriteRegister(CommandReg, PCD_CalcCRC);   // Start the calculation
 
-  // Wait for the CRC calculation to complete. Each iteration of the while-loop takes 17.73�s.
+  // Wait for the CRC calculation to complete. Each iteration of the while-loop takes 17.73us.
   uint16_t i = 5000;
   uint8_t n;
   while (1)
@@ -218,6 +218,7 @@ uint8_t MFRC522::PCD_CalculateCRC(uint8_t *data, uint8_t length, uint8_t *result
       // CRCIRq bit set - calculation done
       break;
     }
+    
     if (--i == 0)
     {
       // The emergency break. We will eventually terminate on this one after 89ms.
@@ -249,14 +250,15 @@ void MFRC522::PCD_Init()
   m_RESET = 0;
   wait_ms(10);
   m_RESET = 1;
-  // Section 8.8.2 in the datasheet says the oscillator start-up time is the start up time of the crystal + 37,74�s. Let us be generous: 50ms.
+  
+  // Section 8.8.2 in the datasheet says the oscillator start-up time is the start up time of the crystal + 37,74us. Let us be generous: 50ms.
   wait_ms(50);
 
   // When communicating with a PICC we need a timeout if something goes wrong.
   // f_timer = 13.56 MHz / (2*TPreScaler+1) where TPreScaler = [TPrescaler_Hi:TPrescaler_Lo].
   // TPrescaler_Hi are the four low bits in TModeReg. TPrescaler_Lo is TPrescalerReg.
   PCD_WriteRegister(TModeReg, 0x80);      // TAuto=1; timer starts automatically at the end of the transmission in all communication modes at all speeds
-  PCD_WriteRegister(TPrescalerReg, 0xA9); // TPreScaler = TModeReg[3..0]:TPrescalerReg, ie 0x0A9 = 169 => f_timer=40kHz, ie a timer period of 25�s.
+  PCD_WriteRegister(TPrescalerReg, 0xA9); // TPreScaler = TModeReg[3..0]:TPrescalerReg, ie 0x0A9 = 169 => f_timer=40kHz, ie a timer period of 25us.
   PCD_WriteRegister(TReloadRegH, 0x03);   // Reload timer with 0x3E8 = 1000, ie 25ms before timeout.
   PCD_WriteRegister(TReloadRegL, 0xE8);
 
@@ -276,7 +278,7 @@ void MFRC522::PCD_Reset()
   PCD_WriteRegister(CommandReg, PCD_SoftReset); // Issue the SoftReset command.
   // The datasheet does not mention how long the SoftRest command takes to complete.
   // But the MFRC522 might have been in soft power-down mode (triggered by bit 4 of CommandReg)
-  // Section 8.8.2 in the datasheet says the oscillator start-up time is the start up time of the crystal + 37,74�s. Let us be generous: 50ms.
+  // Section 8.8.2 in the datasheet says the oscillator start-up time is the start up time of the crystal + 37,74us. Let us be generous: 50ms.
   wait_ms(50);
 
   // Wait for the PowerDown bit in CommandReg to be cleared
@@ -306,16 +308,14 @@ void MFRC522::PCD_AntennaOn()
 /**
  * Executes the Transceive command.
  * CRC validation can only be done if backData and backLen are specified.
- *
- * @return STATUS_OK on success, STATUS_??? otherwise.
  */
-uint8_t MFRC522::PCD_TransceiveData(uint8_t *sendData, ///< Pointer to the data to transfer to the FIFO.
-                                 uint8_t sendLen,      ///< Number of bytes to transfer to the FIFO.
-                                 uint8_t *backData,    ///< NULL or pointer to buffer if data should be read back after executing the command.
-                                 uint8_t *backLen,     ///< In: Max number of bytes to write to *backData. Out: The number of bytes returned.
-                                 uint8_t *validBits,   ///< In/Out: The number of valid bits in the last byte. 0 for 8 valid bits. Default NULL.
-                                 uint8_t rxAlign,      ///< In: Defines the bit position in backData[0] for the first bit received. Default 0.
-                                 bool checkCRC)        ///< In: True => The last two bytes of the response is assumed to be a CRC_A that must be validated.
+uint8_t MFRC522::PCD_TransceiveData(uint8_t *sendData,
+                                    uint8_t sendLen,
+                                    uint8_t *backData,
+                                    uint8_t *backLen,
+                                    uint8_t *validBits,
+                                    uint8_t rxAlign,
+                                    bool    checkCRC)
 {
   uint8_t waitIRq = 0x30;    // RxIRq and IdleIRq
   return PCD_CommunicateWithPICC(PCD_Transceive, waitIRq, sendData, sendLen, backData, backLen, validBits, rxAlign, checkCRC);
@@ -324,18 +324,16 @@ uint8_t MFRC522::PCD_TransceiveData(uint8_t *sendData, ///< Pointer to the data 
 /**
  * Transfers data to the MFRC522 FIFO, executes a commend, waits for completion and transfers data back from the FIFO.
  * CRC validation can only be done if backData and backLen are specified.
- *
- * @return STATUS_OK on success, STATUS_??? otherwise.
  */
-uint8_t MFRC522::PCD_CommunicateWithPICC(uint8_t command, ///< The command to execute. One of the PCD_Command enums.
-                                      uint8_t waitIRq,    ///< The bits in the ComIrqReg register that signals successful completion of the command.
-                                      uint8_t *sendData,  ///< Pointer to the data to transfer to the FIFO.
-                                      uint8_t sendLen,    ///< Number of bytes to transfer to the FIFO.
-                                      uint8_t *backData,  ///< NULL or pointer to buffer if data should be read back after executing the command.
-                                      uint8_t *backLen,   ///< In: Max number of bytes to write to *backData. Out: The number of bytes returned.
-                                      uint8_t *validBits, ///< In/Out: The number of valid bits in the last byte. 0 for 8 valid bits.
-                                      uint8_t rxAlign,    ///< In: Defines the bit position in backData[0] for the first bit received. Default 0.
-                                      bool checkCRC)      ///< In: True => The last two bytes of the response is assumed to be a CRC_A that must be validated.
+uint8_t MFRC522::PCD_CommunicateWithPICC(uint8_t command,
+                                         uint8_t waitIRq,
+                                         uint8_t *sendData,
+                                         uint8_t sendLen,
+                                         uint8_t *backData,
+                                         uint8_t *backLen,
+                                         uint8_t *validBits,
+                                         uint8_t rxAlign,
+                                         bool    checkCRC)
 {
   uint8_t n, _validBits = 0;
   uint32_t i;
@@ -357,7 +355,7 @@ uint8_t MFRC522::PCD_CommunicateWithPICC(uint8_t command, ///< The command to ex
 
   // Wait for the command to complete.
   // In PCD_Init() we set the TAuto flag in TModeReg. This means the timer automatically starts when the PCD stops transmitting.
-  // Each iteration of the do-while-loop takes 17.86�s.
+  // Each iteration of the do-while-loop takes 17.86us.
   i = 2000;
   while (1)
   {
@@ -441,11 +439,9 @@ uint8_t MFRC522::PCD_CommunicateWithPICC(uint8_t command, ///< The command to ex
   return STATUS_OK;
 } // End PCD_CommunicateWithPICC()
 
-/**
+/*
  * Transmits a REQuest command, Type A. Invites PICCs in state IDLE to go to READY and prepare for anticollision or selection. 7 bit frame.
  * Beware: When two PICCs are in the field at the same time I often get STATUS_TIMEOUT - probably due do bad antenna design.
- *
- * @return STATUS_OK on success, STATUS_??? otherwise.
  */
 uint8_t MFRC522::PICC_RequestA(uint8_t *bufferATQA, uint8_t *bufferSize)
 {
@@ -455,19 +451,15 @@ uint8_t MFRC522::PICC_RequestA(uint8_t *bufferATQA, uint8_t *bufferSize)
 /**
  * Transmits a Wake-UP command, Type A. Invites PICCs in state IDLE and HALT to go to READY(*) and prepare for anticollision or selection. 7 bit frame.
  * Beware: When two PICCs are in the field at the same time I often get STATUS_TIMEOUT - probably due do bad antenna design.
- *
- * @return STATUS_OK on success, STATUS_??? otherwise.
  */
 uint8_t MFRC522::PICC_WakeupA(uint8_t *bufferATQA, uint8_t *bufferSize)
 {
   return PICC_REQA_or_WUPA(PICC_CMD_WUPA, bufferATQA, bufferSize);
 } // End PICC_WakeupA()
 
-/**
+/*
  * Transmits REQA or WUPA commands.
  * Beware: When two PICCs are in the field at the same time I often get STATUS_TIMEOUT - probably due do bad antenna design.
- *
- * @return STATUS_OK on success, STATUS_??? otherwise.
  */
 uint8_t MFRC522::PICC_REQA_or_WUPA(uint8_t command, uint8_t *bufferATQA, uint8_t *bufferSize)
 {
@@ -500,22 +492,8 @@ uint8_t MFRC522::PICC_REQA_or_WUPA(uint8_t command, uint8_t *bufferATQA, uint8_t
   return STATUS_OK;
 } // End PICC_REQA_or_WUPA()
 
-/**
+/*
  * Transmits SELECT/ANTICOLLISION commands to select a single PICC.
- * Before calling this function the PICCs must be placed in the READY(*) state by calling PICC_RequestA() or PICC_WakeupA().
- * On success:
- *    - The chosen PICC is in state ACTIVE(*) and all other PICCs have returned to state IDLE/HALT. (Figure 7 of the ISO/IEC 14443-3 draft.)
- *    - The UID size and value of the chosen PICC is returned in *uid along with the SAK.
- *
- * A PICC UID consists of 4, 7 or 10 bytes.
- * Only 4 bytes can be specified in a SELECT command, so for the longer UIDs two or three iterations are used:
- *    UID size  Number of UID bytes   Cascade levels    Example of PICC
- *    ========  ===================   ==============    ===============
- *    single         4            1       MIFARE Classic
- *    double         7            2       MIFARE Ultralight
- *    triple        10            3       Not currently in use?
- *
- * @return STATUS_OK on success, STATUS_??? otherwise.
  */
 uint8_t MFRC522::PICC_Select(Uid *uid, uint8_t validBits)
 {
@@ -773,10 +751,8 @@ uint8_t MFRC522::PICC_Select(Uid *uid, uint8_t validBits)
   return STATUS_OK;
 } // End PICC_Select()
 
-/**
+/*
  * Instructs a PICC in state ACTIVE(*) to go to state HALT.
- *
- * @return STATUS_OK on success, STATUS_??? otherwise.
  */
 uint8_t MFRC522::PICC_HaltA()
 {
@@ -815,17 +791,8 @@ uint8_t MFRC522::PICC_HaltA()
 // Functions for communicating with MIFARE PICCs
 /////////////////////////////////////////////////////////////////////////////////////
 
-/**
+/*
  * Executes the MFRC522 MFAuthent command.
- * This command manages MIFARE authentication to enable a secure communication to any MIFARE Mini, MIFARE 1K and MIFARE 4K card.
- * The authentication is described in the MFRC522 datasheet section 10.3.1.9 and http://www.nxp.com/documents/data_sheet/MF1S503x.pdf section 10.1.
- * For use with MIFARE Classic PICCs.
- * The PICC must be selected - ie in state ACTIVE(*) - before calling this function.
- * Remember to call PCD_StopCrypto1() after communicating with the authenticated PICC - otherwise no new communications can start.
- *
- * All keys are set to FFFFFFFFFFFFh at chip delivery.
- *
- * @return STATUS_OK on success, STATUS_??? otherwise. Probably STATUS_TIMEOUT if you supply the wrong key.
  */
 uint8_t MFRC522::PCD_Authenticate(uint8_t command, uint8_t blockAddr, MIFARE_Key *key, Uid *uid)
 {
@@ -850,7 +817,7 @@ uint8_t MFRC522::PCD_Authenticate(uint8_t command, uint8_t blockAddr, MIFARE_Key
   return PCD_CommunicateWithPICC(PCD_MFAuthent, waitIRq, &sendData[0], sizeof(sendData));
 } // End PCD_Authenticate()
 
-/**
+/*
  * Used to exit the PCD from its authenticated state.
  * Remember to call this function after communicating with an authenticated PICC - otherwise no new communications can start.
  */
@@ -860,21 +827,8 @@ void MFRC522::PCD_StopCrypto1()
   PCD_ClrRegisterBits(Status2Reg, 0x08); // Status2Reg[7..0] bits are: TempSensClear I2CForceHS reserved reserved   MFCrypto1On ModemState[2:0]
 } // End PCD_StopCrypto1()
 
-/**
+/*
  * Reads 16 bytes (+ 2 bytes CRC_A) from the active PICC.
- *
- * For MIFARE Classic the sector containing the block must be authenticated before calling this function.
- *
- * For MIFARE Ultralight only addresses 00h to 0Fh are decoded.
- * The MF0ICU1 returns a NAK for higher addresses.
- * The MF0ICU1 responds to the READ command by sending 16 bytes starting from the page address defined by the command argument.
- * For example; if blockAddr is 03h then pages 03h, 04h, 05h, 06h are returned.
- * A roll-back is implemented: If blockAddr is 0Eh, then the contents of pages 0Eh, 0Fh, 00h and 01h are returned.
- *
- * The buffer must be at least 18 bytes because a CRC_A is also returned.
- * Checks the CRC_A before returning STATUS_OK.
- *
- * @return STATUS_OK on success, STATUS_??? otherwise.
  */
 uint8_t MFRC522::MIFARE_Read(uint8_t blockAddr, uint8_t *buffer, uint8_t *bufferSize)
 {
@@ -901,16 +855,8 @@ uint8_t MFRC522::MIFARE_Read(uint8_t blockAddr, uint8_t *buffer, uint8_t *buffer
   return PCD_TransceiveData(buffer, 4, buffer, bufferSize, NULL, 0, true);
 } // End MIFARE_Read()
 
-/**
+/*
  * Writes 16 bytes to the active PICC.
- *
- * For MIFARE Classic the sector containing the block must be authenticated before calling this function.
- *
- * For MIFARE Ultralight the opretaion is called "COMPATIBILITY WRITE".
- * Even though 16 bytes are transferred to the Ultralight PICC, only the least significant 4 bytes (bytes 0 to 3)
- * are written to the specified address. It is recommended to set the remaining bytes 04h to 0Fh to all logic 0.
- * *
- * @return STATUS_OK on success, STATUS_??? otherwise.
  */
 uint8_t MFRC522::MIFARE_Write(uint8_t blockAddr, uint8_t *buffer, uint8_t bufferSize)
 {
@@ -945,10 +891,8 @@ uint8_t MFRC522::MIFARE_Write(uint8_t blockAddr, uint8_t *buffer, uint8_t buffer
   return STATUS_OK;
 } // End MIFARE_Write()
 
-/**
+/*
  * Writes a 4 byte page to the active MIFARE Ultralight PICC.
- *
- * @return STATUS_OK on success, STATUS_??? otherwise.
  */
 uint8_t MFRC522::MIFARE_UltralightWrite(uint8_t page, uint8_t *buffer, uint8_t bufferSize)
 {
@@ -976,26 +920,16 @@ uint8_t MFRC522::MIFARE_UltralightWrite(uint8_t page, uint8_t *buffer, uint8_t b
   return STATUS_OK;
 } // End MIFARE_Ultralight_Write()
 
-/**
+/*
  * MIFARE Decrement subtracts the delta from the value of the addressed block, and stores the result in a volatile memory.
- * For MIFARE Classic only. The sector containing the block must be authenticated before calling this function.
- * Only for blocks in "value block" mode, ie with access bits [C1 C2 C3] = [110] or [001].
- * Use MIFARE_Transfer() to store the result in a block.
- *
- * @return STATUS_OK on success, STATUS_??? otherwise.
  */
 uint8_t MFRC522::MIFARE_Decrement(uint8_t blockAddr, uint32_t delta)
 {
   return MIFARE_TwoStepHelper(PICC_CMD_MF_DECREMENT, blockAddr, delta);
 } // End MIFARE_Decrement()
 
-/**
+/*
  * MIFARE Increment adds the delta to the value of the addressed block, and stores the result in a volatile memory.
- * For MIFARE Classic only. The sector containing the block must be authenticated before calling this function.
- * Only for blocks in "value block" mode, ie with access bits [C1 C2 C3] = [110] or [001].
- * Use MIFARE_Transfer() to store the result in a block.
- *
- * @return STATUS_OK on success, STATUS_??? otherwise.
  */
 uint8_t MFRC522::MIFARE_Increment(uint8_t blockAddr, uint32_t delta)
 {
@@ -1004,11 +938,6 @@ uint8_t MFRC522::MIFARE_Increment(uint8_t blockAddr, uint32_t delta)
 
 /**
  * MIFARE Restore copies the value of the addressed block into a volatile memory.
- * For MIFARE Classic only. The sector containing the block must be authenticated before calling this function.
- * Only for blocks in "value block" mode, ie with access bits [C1 C2 C3] = [110] or [001].
- * Use MIFARE_Transfer() to store the result in a block.
- *
- * @return STATUS_OK on success, STATUS_??? otherwise.
  */
 uint8_t MFRC522::MIFARE_Restore(uint8_t blockAddr)
 {
@@ -1017,10 +946,8 @@ uint8_t MFRC522::MIFARE_Restore(uint8_t blockAddr)
   return MIFARE_TwoStepHelper(PICC_CMD_MF_RESTORE, blockAddr, 0L);
 } // End MIFARE_Restore()
 
-/**
+/*
  * Helper function for the two-step MIFARE Classic protocol operations Decrement, Increment and Restore.
- *
- * @return STATUS_OK on success, STATUS_??? otherwise.
  */
 uint8_t MFRC522::MIFARE_TwoStepHelper(uint8_t command, uint8_t blockAddr, uint32_t data)
 {
@@ -1049,12 +976,8 @@ uint8_t MFRC522::MIFARE_TwoStepHelper(uint8_t command, uint8_t blockAddr, uint32
   return STATUS_OK;
 } // End MIFARE_TwoStepHelper()
 
-/**
+/*
  * MIFARE Transfer writes the value stored in the volatile memory into one MIFARE Classic block.
- * For MIFARE Classic only. The sector containing the block must be authenticated before calling this function.
- * Only for blocks in "value block" mode, ie with access bits [C1 C2 C3] = [110] or [001].
- *
- * @return STATUS_OK on success, STATUS_??? otherwise.
  */
 uint8_t MFRC522::MIFARE_Transfer(uint8_t blockAddr)
 {
@@ -1073,11 +996,9 @@ uint8_t MFRC522::MIFARE_Transfer(uint8_t blockAddr)
 // Support functions
 /////////////////////////////////////////////////////////////////////////////////////
 
-/**
+/*
  * Wrapper for MIFARE protocol communication.
  * Adds CRC_A, executes the Transceive command and checks that the response is MF_ACK or a timeout.
- *
- * @return STATUS_OK on success, STATUS_??? otherwise.
  */
 uint8_t MFRC522::PCD_MIFARE_Transceive(uint8_t *sendData, uint8_t sendLen, bool acceptTimeout)
 {
@@ -1130,10 +1051,8 @@ uint8_t MFRC522::PCD_MIFARE_Transceive(uint8_t *sendData, uint8_t sendLen, bool 
 } // End PCD_MIFARE_Transceive()
 
 
-/**
+/*
  * Translates the SAK (Select Acknowledge) to a PICC type.
- *
- * @return PICC_Type
  */
 uint8_t MFRC522::PICC_GetType(uint8_t sak)
 {
@@ -1170,9 +1089,8 @@ uint8_t MFRC522::PICC_GetType(uint8_t sak)
   return (retType);
 } // End PICC_GetType()
 
-/**
+/*
  * Returns a string pointer to the PICC type name.
- *
  */
 char* MFRC522::PICC_GetTypeName(uint8_t piccType)
 {
@@ -1184,23 +1102,22 @@ char* MFRC522::PICC_GetTypeName(uint8_t piccType)
   return((char *) _TypeNamePICC[piccType]);
 } // End PICC_GetTypeName()
 
-/**
+/*
  * Returns a string pointer to a status code name.
- *
  */
 char* MFRC522::GetStatusCodeName(uint8_t code)
 {
   return((char *) _ErrorMessage[code]);
 } // End GetStatusCodeName()
 
-/**
+/*
  * Calculates the bit pattern needed for the specified access bits. In the [C1 C2 C3] tupples C1 is MSB (=4) and C3 is LSB (=1).
  */
-void MFRC522::MIFARE_SetAccessBits(uint8_t *accessBitBuffer,  ///< Pointer to byte 6, 7 and 8 in the sector trailer. Bytes [0..2] will be set.
-                                   uint8_t g0,                ///< Access bits [C1 C2 C3] for block 0 (for sectors 0-31) or blocks 0-4 (for sectors 32-39)
-                                   uint8_t g1,                ///< Access bits C1 C2 C3] for block 1 (for sectors 0-31) or blocks 5-9 (for sectors 32-39)
-                                   uint8_t g2,                ///< Access bits C1 C2 C3] for block 2 (for sectors 0-31) or blocks 10-14 (for sectors 32-39)
-                                   uint8_t g3)                ///< Access bits C1 C2 C3] for the sector trailer, block 3 (for sectors 0-31) or block 15 (for sectors 32-39)
+void MFRC522::MIFARE_SetAccessBits(uint8_t *accessBitBuffer,  
+                                   uint8_t g0,                
+                                   uint8_t g1,                
+                                   uint8_t g2,                
+                                   uint8_t g3)
 {
   uint8_t c1 = ((g3 & 4) << 1) | ((g2 & 4) << 0) | ((g1 & 4) >> 1) | ((g0 & 4) >> 2);
   uint8_t c2 = ((g3 & 2) << 2) | ((g2 & 2) << 1) | ((g1 & 2) << 0) | ((g0 & 2) >> 1);
@@ -1215,11 +1132,9 @@ void MFRC522::MIFARE_SetAccessBits(uint8_t *accessBitBuffer,  ///< Pointer to by
 // Convenience functions - does not add extra functionality
 /////////////////////////////////////////////////////////////////////////////////////
 
-/**
+/*
  * Returns true if a PICC responds to PICC_CMD_REQA.
  * Only "new" cards in state IDLE are invited. Sleeping cards in state HALT are ignored.
- *
- * @return bool
  */
 bool MFRC522::PICC_IsNewCardPresent(void)
 {
@@ -1229,13 +1144,8 @@ bool MFRC522::PICC_IsNewCardPresent(void)
   return ((result == STATUS_OK) || (result == STATUS_COLLISION));
 } // End PICC_IsNewCardPresent()
 
-/**
+/*
  * Simple wrapper around PICC_Select.
- * Returns true if a UID could be read.
- * Remember to call PICC_IsNewCardPresent(), PICC_RequestA() or PICC_WakeupA() first.
- * The read UID is available in the class variable uid.
- *
- * @return bool
  */
 bool MFRC522::PICC_ReadCardSerial(void)
 {
