@@ -18,7 +18,7 @@
 #include "mbed.h"
 #include "MFRC522.h"
 
-DigitalOut LedGreen(LED1);
+DigitalOut LedGreen(LED2);
 
 //Serial connection to PC for output
 Serial pc(USBTX, USBRX);
@@ -51,8 +51,10 @@ int main(void)
                     pc.printf(" %X02", RfChip.uid.uidByte[i]);
                 }
                 pc.printf("\n\r");
+                wait_ms(200);
             }
         }
+        
 
 /*      if ( RfChip2.PICC_IsNewCardPresent()) {
             if (RfChip2.PICC_ReadCardSerial()) {

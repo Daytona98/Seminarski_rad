@@ -55,8 +55,8 @@ MFRC522::MFRC522(PinName mosi,
 {
   /* Configure SPI bus */
   m_SPI.format(8, 0);
-//  m_SPI.frequency(8000000);
-  m_SPI.frequency(1000000);
+  m_SPI.frequency(8000000);
+
 
   /* Release SPI-CS pin */
   m_CS       = 1;
