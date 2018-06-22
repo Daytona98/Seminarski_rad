@@ -343,8 +343,15 @@ public:
   // ************************************************************************************
   //@{
 
+    
+   void PCD_Reset_On (void);
+   
+   void PCD_Reset_Off (void);
+
   /**
   * Initializes the MFRC522 chip.
+  
+  
   */
   void    PCD_Init           (void);
 

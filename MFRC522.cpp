@@ -55,7 +55,8 @@ MFRC522::MFRC522(PinName mosi,
 {
   /* Configure SPI bus */
   m_SPI.format(8, 0);
-  m_SPI.frequency(8000000);
+//  m_SPI.frequency(8000000);
+  m_SPI.frequency(1000000);
 
   /* Release SPI-CS pin */
   m_CS       = 1;
@@ -240,6 +241,16 @@ uint8_t MFRC522::PCD_CalculateCRC(uint8_t *data, uint8_t length, uint8_t *result
 /////////////////////////////////////////////////////////////////////////////////////
 // Functions for manipulating the MFRC522
 /////////////////////////////////////////////////////////////////////////////////////
+void MFRC522::PCD_Reset_On()
+{
+    m_RESET = 0;
+}
+
+void MFRC522::PCD_Reset_Off()
+{
+    m_RESET = 1;
+}
+
 
 /**
  * Initializes the MFRC522 chip.
